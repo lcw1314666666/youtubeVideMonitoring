@@ -1,51 +1,11 @@
 const fs = require('fs')
 const puppeteer = require('puppeteer');
 const nodemailer = require('nodemailer');
-// const transporter = require('./sendMail.js')
+const { getDownloadList, setDownloadList, transporter, scrollTimer } = require('./utils/index')
+const { update } = require('./utils/update.js') // 更新数据
 
-(async () => {
+;(async () => {
     let api = 'https://www.youtube.com/channel/UCMUnInmOkrWN4gof9KlhNmQ/videos?view=0&sort=dd&shelf_id=0' // 站外链接
-
-    let transporter = nodemailer.createTransport({
-        // host: 'smtp.ethereal.email',
-        service: 'qq', // 使用了内置传输发送邮件 查看支持列表：https://nodemailer.com/smtp/well-known/
-        port: 465, // SMTP 端口
-        secureConnection: true, // 使用了 SSL
-        auth: {
-            user: '1820566696@qq.com',
-            // 这里密码不是qq密码，是你设置的smtp授权码
-            pass: 'mvjeoapjantyefbh',
-        }
-    });
-
-    // 读取JSON文件
-    function getDownloadList() {
-        return new Promise((resolve, reject) => {
-            fs.readFile('newestVideo.json', 'utf-8', (err, data) => {
-                if (err) {
-                    reject(err)
-                }
-                const downloadList = JSON.parse(data.toString())
-
-                resolve(downloadList)
-            })
-        })
-    }
-
-    // 写入JSON文件
-    async function setDownloadList(newDownload) {
-        // const historyDown = await getDownloadList() // 获取历史下载文件记录
-        const downloadList = JSON.stringify(newDownload)
-        return new Promise((resolve, reject) => {
-            fs.writeFile('newestVideo.json', downloadList, (err) => {
-                if (err) {
-                    console.log(err)
-                    reject(err)
-                }
-                resolve(downloadList)
-            })
-        })
-    }
 
     const browser = await puppeteer.launch({
         slowMo: 100,    //放慢速度
@@ -55,6 +15,10 @@ const nodemailer = require('nodemailer');
     });
     const page = await browser.newPage();
     await page.goto(api);
+
+
+    const data = await update(page)
+    console.log(data)
 
     setInterval(async function () {
         console.log('获取最新视频信息')
@@ -85,24 +49,24 @@ const nodemailer = require('nodemailer');
             };
 
             // 发送邮箱
-            // transporter.sendMail(mailOptions, (error, info) => {
-            //     if (error) {
-            //         return console.log(error);
-            //     }
-            //     console.log('邮件发送成功', info.messageId);
-            //     // Message sent: <04ec7731-cc68-1ef6-303c-61b0f796b78f@qq.com>
-            // });
+            transporter.sendMail(mailOptions, (error, info) => {
+                if (error) {
+                    return console.log(error);
+                }
+                console.log('邮件发送成功', info.messageId);
+                // Message sent: <04ec7731-cc68-1ef6-303c-61b0f796b78f@qq.com>
+            });
 
             // 下载新视频并上传
 
             const downloadPage = await browser.newPage();
             await downloadPage.goto('https://en.savefrom.net/181/') // 跳转视频下载网站
 
-            await downloadPage.type('#sf_url', newVideoUrl, {delay: 100})
+            await downloadPage.type('#sf_url', newVideoUrl, {delay: 100}) // 填写下载地址
             await downloadPage.click('#sf_submit')
             await downloadPage.waitForSelector('#sf_result'); // 等待下载链接加载完毕
             await downloadPage.waitForSelector('.def-btn-box > a.link-download');
-            await downloadPage.click('.def-btn-box > a.link-download')
+            await downloadPage.click('.def-btn-box > a.link-download') // 点击下载
 
             // 更新json文件
             setDownloadList({ newestVideo: newVideo })
