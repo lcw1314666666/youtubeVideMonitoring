@@ -52,10 +52,38 @@ Date.prototype.Format = function (fmt) { // author: meizz
         const newVideoList = await updateTop(page) // 获取最新视频列表
         console.log(newVideoList)
 
-        const historyVideo = await getJSONList('newestVideo.json') // 获取历史视频
+        let historyVideo = await getJSONList('newestVideo.json') // 获取历史视频
+
+        const uploadHistory = await getJSONList('./uploadJSON.json') // 获取历史上传
+        const downloadList = await getJSONList('./downloadJSON.json')
+
 
         const newVideoUrl = newVideoList[0].videoUrl // 视频链接
         const newVideoName = newVideoList[0].videoName
+
+        // 如果有新的视频并且如果上传的文件中没有找到下载下载的文件
+        if (
+            historyVideo.newestVideo !== undefined && historyVideo.newestVideo !== newVideoName &&
+            downloadList.findIndex((downloadItem) => downloadItem.videoUrl === newVideoList[0].videoUrl) > -1 &&
+            uploadHistory.findIndex((uploadItem) => uploadItem.videoUrl === newVideoList[0].videoUrl) === -1
+        ) {
+            clearInterval(updateTimer) // 如果有新视频清理掉定时器
+
+            const newVideo = downloadList.filter((downloadItem) => { // 获取已下载的最新视频数据
+                return downloadItem.videoUrl === newVideoList[0].videoUrl
+            })
+            // 上传视频
+            await uploadFile(browser, newVideo[0])
+
+            const uploadHistory = await getJSONList('./uploadJSON.json') // 获取历史上传
+            uploadHistory.push(newVideo[0])
+            await setJSONList('./uploadJSON.json', uploadHistory) // 更新历史上传
+
+            // 更新最新视频json文件
+            await setJSONList('newestVideo.json', { newestVideo: newVideo[0].videoName })
+
+            historyVideo = await getJSONList('newestVideo.json') // 更新历史信息
+        }
 
         if (historyVideo.newestVideo !== undefined && historyVideo.newestVideo !== newVideoName) { // 有新视频
             console.log('有新视频！' + newVideoName, new Date().Format("yyyy-MM-dd hh:mm:ss"))
@@ -108,9 +136,8 @@ Date.prototype.Format = function (fmt) { // author: meizz
             // 等待文件下载完毕
             const fileDownloadState = await waitFileDownload(filePath)
             if (fileDownloadState) {
-                console.log('文件上传完毕')
-                // 更新json文件
-                await setJSONList('newestVideo.json', { newestVideo: newVideoName })
+                console.log('文件下载完毕')
+
                 // 整理下载视频信息
                 const newVideoObj = {
                     videoName: newVideoList[0].videoName,
@@ -118,8 +145,20 @@ Date.prototype.Format = function (fmt) { // author: meizz
                     videoCover: newVideoList[0].videoCover,
                     videoPath: filePath
                 }
+
+                const downloadList = await getJSONList('./downloadJSON.json')
+                downloadList.push(newVideoObj)
+                await setJSONList('./downloadJSON.json', downloadList)
+
                 // 上传视频
                 await uploadFile(browser, newVideoObj)
+
+                const uploadHistory = await getJSONList('./uploadJSON.json') // 获取历史上传
+                uploadHistory.push(newVideoObj)
+                await setJSONList('./uploadJSON.json', uploadHistory) // 更新历史上传
+
+                // 更新最新视频json文件
+                await setJSONList('newestVideo.json', { newestVideo: newVideoName })
             }
 
             await page.goto(api) // 返回主页
